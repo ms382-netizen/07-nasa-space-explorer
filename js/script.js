@@ -6,7 +6,7 @@
 
 // "DEMO_KEY" works without signing up, but is limited (~30 requests/hour).
 // For higher limits, get a free key at https://api.nasa.gov and paste it here.
-const API_KEY = 'DEMO_KEY';
+const API_KEY = 'MQpgqQhJKPpgnL8bfgbgLmBTLGFmdngMqRmr7mtT';
 const APOD_URL = 'https://api.nasa.gov/planetary/apod';
 
 // ---- Grab elements from the starter page ----
