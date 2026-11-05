@@ -4,9 +4,11 @@
 // selected date range and shows them in a gallery with a modal.
 // =============================================================
 
+console.log('Space Explorer script.js v4 loaded');
+
 // "DEMO_KEY" works without signing up, but is limited (~30 requests/hour).
 // For higher limits, get a free key at https://api.nasa.gov and paste it here.
-const API_KEY = 'MQpgqQhJKPpgnL8bfgbgLmBTLGFmdngMqRmr7mtT';
+const API_KEY = 'DEMO_KEY';
 const APOD_URL = 'https://api.nasa.gov/planetary/apod';
 
 // ---- Grab elements from the starter page ----
@@ -95,12 +97,12 @@ function showMessage(html, className) {
 // =============================================================
 // Fetch data from NASA's APOD API
 // =============================================================
-async function fetchApodData(startDate, endDate) {
+// Pass either { start_date, end_date } or { count } (random entries)
+async function fetchApodData(query) {
   const params = new URLSearchParams({
     api_key: API_KEY,
-    start_date: startDate,
-    end_date: endDate,
     thumbs: 'true', // asks NASA for thumbnail images of video entries
+    ...query,
   });
 
   const response = await fetch(`${APOD_URL}?${params}`);
@@ -131,14 +133,27 @@ async function fetchApodData(startDate, endDate) {
 // When NASA's site is missing a day's picture, the API sends a generic
 // "NASA Science" placeholder instead. We hide those so the gallery only
 // shows real Astronomy Pictures of the Day.
-function isPlaceholder(item) {
-  const title = (item.title || '').trim().toLowerCase();
+function isPlaceholder(item, repeatedUrls) {
+  const title = (item.title || '').replace(/\s+/g, ' ').trim().toLowerCase();
   const explanation = (item.explanation || '').toLowerCase();
   return (
-    title === 'nasa science' ||
+    title.includes('nasa science') ||
     explanation.includes('no longer available') ||
-    explanation.includes('default image')
+    explanation.includes('default image') ||
+    repeatedUrls.has(item.url) // same picture on several days = placeholder
   );
+}
+
+// Finds image URLs that show up on more than one date
+function findRepeatedUrls(items) {
+  const seen = new Set();
+  const repeated = new Set();
+  items.forEach((item) => {
+    if (!item.url) return;
+    if (seen.has(item.url)) repeated.add(item.url);
+    seen.add(item.url);
+  });
+  return repeated;
 }
 
 // =============================================================
@@ -331,27 +346,65 @@ getImagesButton.addEventListener('click', async () => {
   getImagesButton.disabled = true;
 
   try {
-    const allItems = await fetchApodData(startDate, endDate);
-    const items = allItems.filter((item) => !isPlaceholder(item));
+    const items = await loadRealPhotos({ start_date: startDate, end_date: endDate });
 
-    if (allItems.length > 0 && items.length === 0) {
-      showMessage(
-        '<div class="placeholder-icon">🛰️</div><p>NASA doesn’t have pictures available for these dates right now. Try an earlier date range!</p>',
-        'placeholder'
-      );
+    if (items.length === 0) {
+      showNoPhotosMessage();
       return;
     }
 
     renderGallery(items);
   } catch (error) {
-    console.error(error);
-    const p = document.createElement('p');
-    p.textContent = `⚠️ ${error.message || 'Something went wrong. Check your connection and try again.'}`;
-    gallery.innerHTML = '<div class="placeholder error"></div>';
-    gallery.firstChild.appendChild(p);
+    showError(error);
   } finally {
     getImagesButton.disabled = false;
   }
 });
+
+// Fetches entries and removes NASA's placeholder ones
+async function loadRealPhotos(query) {
+  const allItems = await fetchApodData(query);
+  const repeatedUrls = findRepeatedUrls(allItems);
+  const items = allItems.filter((item) => !isPlaceholder(item, repeatedUrls));
+  console.log(`Got ${allItems.length} entries, hid ${allItems.length - items.length} placeholders`);
+  return items;
+}
+
+function showError(error) {
+  console.error(error);
+  const p = document.createElement('p');
+  p.textContent = `⚠️ ${error.message || 'Something went wrong. Check your connection and try again.'}`;
+  gallery.innerHTML = '<div class="placeholder error"></div>';
+  gallery.firstChild.appendChild(p);
+}
+
+// When NASA has no real pictures for the chosen dates, offer random
+// photos from the APOD archive (1995 to today) instead of an empty page.
+function showNoPhotosMessage() {
+  showMessage(
+    `<div class="placeholder-icon">🛰️</div>
+     <p>NASA’s API doesn’t have pictures for these dates yet. Try different dates, or explore some favorites from the archive!</p>
+     <button type="button" class="random-button">🎲 Show random space photos</button>`,
+    'placeholder'
+  );
+  gallery.querySelector('.random-button').addEventListener('click', showRandomPhotos);
+}
+
+async function showRandomPhotos() {
+  showMessage('<span class="spinner" aria-hidden="true"></span><p>🔄 Loading space photos…</p>', 'loading');
+  getImagesButton.disabled = true;
+  try {
+    const items = await loadRealPhotos({ count: 12 });
+    if (items.length === 0) {
+      showNoPhotosMessage();
+      return;
+    }
+    renderGallery(items);
+  } catch (error) {
+    showError(error);
+  } finally {
+    getImagesButton.disabled = false;
+  }
+}
 
 showRandomFact();
