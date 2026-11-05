@@ -128,6 +128,19 @@ async function fetchApodData(startDate, endDate) {
   return items.sort((a, b) => b.date.localeCompare(a.date));
 }
 
+// When NASA's site is missing a day's picture, the API sends a generic
+// "NASA Science" placeholder instead. We hide those so the gallery only
+// shows real Astronomy Pictures of the Day.
+function isPlaceholder(item) {
+  const title = (item.title || '').trim().toLowerCase();
+  const explanation = (item.explanation || '').toLowerCase();
+  return (
+    title === 'nasa science' ||
+    explanation.includes('no longer available') ||
+    explanation.includes('default image')
+  );
+}
+
 // =============================================================
 // Gallery
 // =============================================================
@@ -318,7 +331,17 @@ getImagesButton.addEventListener('click', async () => {
   getImagesButton.disabled = true;
 
   try {
-    const items = await fetchApodData(startDate, endDate);
+    const allItems = await fetchApodData(startDate, endDate);
+    const items = allItems.filter((item) => !isPlaceholder(item));
+
+    if (allItems.length > 0 && items.length === 0) {
+      showMessage(
+        '<div class="placeholder-icon">🛰️</div><p>NASA doesn’t have pictures available for these dates right now. Try an earlier date range!</p>',
+        'placeholder'
+      );
+      return;
+    }
+
     renderGallery(items);
   } catch (error) {
     console.error(error);
